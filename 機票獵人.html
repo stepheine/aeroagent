@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AeroAgent - AI 機票管家</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Noto Sans TC"', 'sans-serif'],
+                    },
+                    colors: {
+                        slate: {
+                            50: '#f8fafc',
+                            100: '#f1f5f9',
+                            800: '#1e293b',
+                            900: '#0f172a',
+                        },
+                        indigo: {
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* 自訂開關樣式 */
+        .toggle-checkbox:checked {
+            right: 0;
+            border-color: #6366f1;
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: #6366f1;
+        }
+        /* 隱藏捲軸但保留捲動功能 */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        /* 原生日期選擇器美化 */
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            opacity: 0;
+            position: absolute;
+            right: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+        
+        .slide-in {
+            animation: slideIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        @keyframes slideIn {
+            from { transform: translateY(-150%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex justify-center items-center min-h-screen text-slate-800 selection:bg-indigo-100 selection:text-indigo-900">
+
+    <!-- App 容器 -->
+    <div class="w-full max-w-md h-[100dvh] sm:h-[850px] bg-slate-50 sm:rounded-3xl sm:shadow-2xl overflow-y-auto no-scrollbar relative flex flex-col">
+        
+        <!-- 頂部推播通知 (預設隱藏) -->
+        <div id="push-notification" class="hidden absolute top-4 left-4 right-4 z-50 bg-white/90 backdrop-blur-md border border-indigo-100 shadow-lg rounded-2xl p-4 flex items-start gap-3 transform -translate-y-full transition-all">
+            <div class="bg-indigo-100 text-indigo-600 p-2 rounded-full mt-1">
+                <i data-lucide="bell-ring" class="w-5 h-5"></i>
+            </div>
+            <div class="flex-1">
+                <h4 class="text-sm font-bold text-slate-900">發現歷史新低價！✨</h4>
+                <p class="text-xs text-slate-500 mt-1">您追蹤的「台北 ✈️ 東京」目前只要 NT$ 6,850，比平均便宜 32%。</p>
+            </div>
+            <button onclick="closeNotification()" class="text-slate-400 hover:text-slate-600">
+                <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+        </div>
+
+        <!-- Header -->
+        <header class="pt-10 pb-4 px-6 sticky top-0 bg-slate-50/80 backdrop-blur-md z-10 flex justify-between items-center">
+            <div class="flex items-center gap-2">
+                <i data-lucide="plane" class="w-6 h-6 text-indigo-600 transform -rotate-45"></i>
+                <h1 class="text-xl font-bold tracking-tight text-slate-900">AeroAgent</h1>
+            </div>
+            <button class="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 shadow-sm relative">
+                <i data-lucide="bell" class="w-5 h-5"></i>
+                <span class="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+            </button>
+        </header>
+
+        <!-- 主要內容區 -->
+        <main class="flex-1 px-6 pb-20">
+            
+            <!-- AI 問候 -->
+            <div class="mb-6">
+                <p class="text-slate-500 text-sm mb-1">早安，旅人</p>
+                <h2 class="text-2xl font-semibold text-slate-800">今天想去哪裡探索？</h2>
+            </div>
+
+            <!-- 搜尋卡片 (Notion Style) -->
+            <div class="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 mb-8">
+                
+                <!-- 航程選項 -->
+                <div class="flex bg-slate-100 p-1 rounded-xl mb-5">
+                    <button class="flex-1 py-2 text-sm font-medium rounded-lg bg-white shadow-sm text-slate-800 transition-all">來回</button>
+                    <button class="flex-1 py-2 text-sm font-medium rounded-lg text-slate-500 hover:text-slate-700 transition-all">單程</button>
+                    <button class="flex-1 py-2 text-sm font-medium rounded-lg text-slate-500 hover:text-slate-700 transition-all">多個城市</button>
+                </div>
+
+                <!-- 地點輸入 -->
+                <div class="relative border border-slate-200 rounded-2xl p-4 mb-4 flex flex-col gap-4">
+                    <div class="flex items-center gap-3">
+                        <i data-lucide="map-pin" class="w-5 h-5 text-slate-400"></i>
+                        <div class="flex-1">
+                            <label class="text-[10px] uppercase font-semibold text-slate-400 tracking-wider">出發地</label>
+                            <input type="text" value="台北 (TPE)" class="w-full text-base font-medium text-slate-800 bg-transparent outline-none placeholder-slate-300">
+                        </div>
+                    </div>
+                    
+                    <div class="h-[1px] w-full bg-slate-100"></div>
+                    
+                    <div class="flex items-center gap-3">
+                        <i data-lucide="map-pin" class="w-5 h-5 text-indigo-500"></i>
+                        <div class="flex-1">
+                            <label class="text-[10px] uppercase font-semibold text-slate-400 tracking-wider">目的地</label>
+                            <input type="text" value="東京 (NRT)" placeholder="搜尋城市或機場" class="w-full text-base font-medium text-slate-800 bg-transparent outline-none placeholder-slate-300">
+                        </div>
+                    </div>
+
+                    <!-- 切換按鈕 -->
+                    <button class="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-8 bg-slate-50 border border-slate-200 rounded-full flex items-center justify-center text-slate-500 shadow-sm z-10 hover:bg-slate-100 transition-colors">
+                        <i data-lucide="arrow-up-down" class="w-4 h-4"></i>
+                    </button>
+                </div>
+
+                <!-- 日期與直飛選項 -->
+                <div class="flex items-center justify-between gap-4 mb-6">
+                    <!-- 日期 (模擬) -->
+                    <div class="flex-1 border border-slate-200 rounded-2xl p-3 flex items-center gap-3 relative overflow-hidden">
+                        <i data-lucide="calendar" class="w-5 h-5 text-slate-400"></i>
+                        <div>
+                            <label class="text-[10px] uppercase font-semibold text-slate-400 tracking-wider">年月日</label>
+                            <div class="text-sm font-medium text-slate-800">10/12 - 10/16</div>
+                        </div>
+                        <input type="date" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                    </div>
+
+                    <!-- 直飛開關 -->
+                    <div class="flex flex-col items-center justify-center px-2">
+                        <label class="text-[10px] uppercase font-semibold text-slate-400 tracking-wider mb-2">僅限直飛</label>
+                        <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
+                            <input type="checkbox" name="toggle" id="direct-flight" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer transition-all duration-300 checked:border-indigo-500 z-10"/>
+                            <label for="direct-flight" class="toggle-label block overflow-hidden h-5 rounded-full bg-slate-200 cursor-pointer transition-colors duration-300"></label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 搜尋按鈕 -->
+                <button onclick="searchFlights()" class="w-full bg-slate-900 text-white rounded-2xl py-4 flex items-center justify-center gap-2 font-medium hover:bg-slate-800 transition-colors shadow-md shadow-slate-900/20">
+                    <i data-lucide="sparkles" class="w-4 h-4 text-indigo-300"></i>
+                    AI 智慧搜尋
+                </button>
+            </div>
+
+            <!-- 載入中動畫 (預設隱藏) -->
+            <div id="loading-state" class="hidden flex-col items-center justify-center py-10">
+                <i data-lucide="loader-2" class="w-8 h-8 text-indigo-500 animate-spin mb-3"></i>
+                <p class="text-sm text-slate-500 font-medium">AeroAgent 正在為您比對數百家航空...</p>
+            </div>
+
+            <!-- 搜尋結果區 (預設隱藏) -->
+            <div id="search-results" class="hidden animate-fade-in">
+                
+                <!-- AI 分析小卡 -->
+                <div class="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 mb-6 flex gap-3">
+                    <div class="mt-0.5"><i data-lucide="bot" class="w-5 h-5 text-indigo-600"></i></div>
+                    <div>
+                        <h4 class="text-sm font-semibold text-indigo-900">AI 價格分析</h4>
+                        <p class="text-xs text-indigo-700/80 mt-1 leading-relaxed">目前飛往東京的機票處於<strong>歷史低價區間</strong>，預計下週將上漲 15%。建議立即購買下方最佳選項。</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-bold text-slate-800">最佳推薦航班</h3>
+                    <span class="text-xs font-medium text-slate-500 bg-slate-200/50 px-2 py-1 rounded-md">依價格排序</span>
+                </div>
+
+                <!-- 航班卡片 1 -->
+                <div class="bg-white border border-slate-200 rounded-2xl p-4 mb-4 shadow-sm relative overflow-hidden">
+                    <div class="absolute top-0 left-0 w-1 h-full bg-green-400"></div>
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="flex items-center gap-2">
+                            <div class="w-6 h-6 bg-slate-100 rounded-full flex items-center justify-center text-[10px] font-bold">JL</div>
+                            <span class="text-sm font-semibold text-slate-700">日本航空</span>
+                        </div>
+                        <span class="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded-full">最便宜</span>
+                    </div>
+                    
+                    <div class="flex justify-between items-center mb-5">
+                        <div class="text-center">
+                            <div class="text-lg font-bold text-slate-900">08:50</div>
+                            <div class="text-xs text-slate-500">TPE</div>
+                        </div>
+                        <div class="flex-1 px-4 flex flex-col items-center relative">
+                            <span class="text-[10px] text-slate-400 mb-1">直飛 • 3h 10m</span>
+                            <div class="w-full h-[1px] bg-slate-200 relative">
+                                <i data-lucide="plane" class="w-3 h-3 text-slate-300 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></i>
+                            </div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-lg font-bold text-slate-900">13:00</div>
+                            <div class="text-xs text-slate-500">NRT</div>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between pt-4 border-t border-slate-100">
+                        <div>
+                            <div class="text-xs text-slate-400 line-through">NT$ 9,200</div>
+                            <div class="text-xl font-black text-slate-900">NT$ 6,850</div>
+                        </div>
+                        <button class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold py-2 px-6 rounded-xl transition-colors shadow-md shadow-indigo-600/20">
+                            購買
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 航班卡片 2 -->
+                <div class="bg-white border border-slate-200 rounded-2xl p-4 mb-8 shadow-sm">
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="flex items-center gap-2">
+                            <div class="w-6 h-6 bg-slate-100 rounded-full flex items-center justify-center text-[10px] font-bold">BR</div>
+                            <span class="text-sm font-semibold text-slate-700">長榮航空</span>
+                        </div>
+                        <span class="bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-0.5 rounded-full">最快</span>
+                    </div>
+                    
+                    <div class="flex justify-between items-center mb-5">
+                        <div class="text-center">
+                            <div class="text-lg font-bold text-slate-900">14:30</div>
+                            <div class="text-xs text-slate-500">TPE</div>
+                        </div>
+                        <div class="flex-1 px-4 flex flex-col items-center relative">
+                            <span class="text-[10px] text-slate-400 mb-1">直飛 • 3h 05m</span>
+                            <div class="w-full h-[1px] bg-slate-200 relative">
+                                <i data-lucide="plane" class="w-3 h-3 text-slate-300 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></i>
+                            </div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-lg font-bold text-slate-900">18:35</div>
+                            <div class="text-xs text-slate-500">NRT</div>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between pt-4 border-t border-slate-100">
+                        <div>
+                            <div class="text-xl font-black text-slate-900">NT$ 8,100</div>
+                        </div>
+                        <button class="bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold py-2 px-6 rounded-xl transition-colors">
+                            購買
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 查價歷程 -->
+            <div id="search-history" class="mb-10">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wider">查價歷程與追蹤</h3>
+                    <button class="text-xs font-medium text-indigo-600">管理</button>
+                </div>
+
+                <div class="space-y-3">
+                    <!-- 紀錄 1 -->
+                    <div class="bg-white border border-slate-200 rounded-xl p-3 flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="bg-slate-50 p-2 rounded-lg text-slate-400">
+                                <i data-lucide="history" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <div class="text-sm font-semibold text-slate-800">台北 ✈️ 東京</div>
+                                <div class="text-xs text-slate-500">10/12 - 10/16 • 來回</div>
+                            </div>
+                        </div>
+                        <button class="text-indigo-600 bg-indigo-50 p-2 rounded-full">
+                            <i data-lucide="bell" class="w-4 h-4 fill-indigo-100"></i>
+                        </button>
+                    </div>
+
+                    <!-- 紀錄 2 -->
+                    <div class="bg-white border border-slate-200 rounded-xl p-3 flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="bg-slate-50 p-2 rounded-lg text-slate-400">
+                                <i data-lucide="history" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <div class="text-sm font-semibold text-slate-800">台北 ✈️ 曼谷</div>
+                                <div class="text-xs text-slate-500">11/05 - 11/10 • 來回</div>
+                            </div>
+                        </div>
+                        <button class="text-slate-400 bg-slate-50 hover:bg-slate-100 p-2 rounded-full transition-colors">
+                            <i data-lucide="bell" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- 底部導覽列 (純視覺) -->
+        <nav class="absolute bottom-0 w-full bg-white border-t border-slate-200 pb-safe pt-3 px-6 flex justify-between items-center sm:rounded-b-3xl">
+            <button class="flex flex-col items-center gap-1 text-indigo-600 pb-4">
+                <i data-lucide="search" class="w-5 h-5"></i>
+                <span class="text-[10px] font-medium">探索</span>
+            </button>
+            <button class="flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600 pb-4">
+                <i data-lucide="heart" class="w-5 h-5"></i>
+                <span class="text-[10px] font-medium">追蹤</span>
+            </button>
+            <button class="flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600 pb-4">
+                <i data-lucide="briefcase" class="w-5 h-5"></i>
+                <span class="text-[10px] font-medium">行程</span>
+            </button>
+            <button class="flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600 pb-4">
+                <i data-lucide="user" class="w-5 h-5"></i>
+                <span class="text-[10px] font-medium">帳戶</span>
+            </button>
+        </nav>
+
+    </div>
+
+    <script>
+        // 初始化 Lucide Icons
+        lucide.createIcons();
+
+        // 模擬搜尋功能
+        function searchFlights() {
+            const loadingState = document.getElementById('loading-state');
+            const searchResults = document.getElementById('search-results');
+            const searchHistory = document.getElementById('search-history');
+            
+            // 隱藏歷程與結果，顯示載入中
+            searchResults.classList.add('hidden');
+            searchHistory.classList.add('hidden');
+            loadingState.classList.remove('hidden');
+            loadingState.style.display = 'flex';
+
+            // 模擬 API 延遲
+            setTimeout(() => {
+                loadingState.style.display = 'none';
+                loadingState.classList.add('hidden');
+                
+                searchResults.classList.remove('hidden');
+                searchHistory.classList.remove('hidden');
+                
+                // 捲動到結果區域
+                searchResults.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 1500);
+        }
+
+        // 模擬隨機推播通知 (頁面載入後 3 秒觸發)
+        setTimeout(() => {
+            const notification = document.getElementById('push-notification');
+            notification.classList.remove('hidden');
+            notification.classList.add('slide-in');
+        }, 3000);
+
+        // 關閉通知
+        function closeNotification() {
+            const notification = document.getElementById('push-notification');
+            notification.style.opacity = '0';
+            notification.style.transform = 'translateY(-150%)';
+            setTimeout(() => {
+                notification.classList.add('hidden');
+            }, 300);
+        }
+    </script>
+</body>
+</html>
